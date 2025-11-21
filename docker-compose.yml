@@ -1,0 +1,53 @@
+services:
+  # Next.js Selfie Mailer App
+  gmail-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gmail-manager
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--timeout=3", "--spider", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - gmail-network
+
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
+    restart: always
+    command: tunnel --no-autoupdate --protocol http2 --grace-period 30s --metrics 0.0.0.0:20241 run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      - TUNNEL_LOGLEVEL=info
+      - TUNNEL_TRANSPORT_LOGLEVEL=warn
+      - TUNNEL_ORIGIN_ENABLE_HTTP2=true
+    networks:
+      - gmail-network
+    depends_on:
+      gmail-manager:
+        condition: service_healthy
+
+networks:
+  gmail-network:
+    driver: bridge

@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# WhatsApp sessions
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Docker volumes
+docker-volumes/
+
+# Cloudflare
+cloudflare-tunnel.json

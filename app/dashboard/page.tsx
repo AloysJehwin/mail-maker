@@ -19,7 +19,7 @@ export default function Dashboard() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [selectedEmoji, setSelectedEmoji] = useState<string>("");
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [zoom, setZoom] = useState(1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -76,13 +76,12 @@ export default function Dashboard() {
         return;
       }
 
+      // Request high quality portrait mode camera
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facingMode,
-          width: { min: 720, ideal: 1080, max: 1920 },
-          height: { min: 1280, ideal: 1920, max: 3840 },
-          frameRate: { ideal: 30, max: 60 },
-          aspectRatio: { ideal: 0.5625 } // 9:16 for mobile
+          width: { ideal: 1080, max: 1920 },
+          height: { ideal: 1920, max: 3840 },
         },
         audio: false
       });
@@ -153,20 +152,38 @@ export default function Dashboard() {
 
     if (!context) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // High quality output
+    const targetWidth = 1080;
+    const targetHeight = 1920;
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
 
-    // Only mirror if front camera, back camera should not be flipped
-    if (facingMode === "user") {
-      context.save();
-      context.translate(canvas.width, 0);
-      context.scale(-1, 1);
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      context.restore();
+    // Clear canvas
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate object-cover behavior to match preview exactly
+    // This ensures captured image matches what user sees in preview
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const canvasAspect = targetWidth / targetHeight;
+
+    let drawWidth, drawHeight, offsetX, offsetY;
+
+    if (videoAspect > canvasAspect) {
+      // Video is wider - fit height and crop width (like object-cover)
+      drawHeight = targetHeight;
+      drawWidth = video.videoWidth * (targetHeight / video.videoHeight);
+      offsetX = (targetWidth - drawWidth) / 2;
+      offsetY = 0;
     } else {
-      // Back camera - no flip
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Video is taller - fit width and crop height (like object-cover)
+      drawWidth = targetWidth;
+      drawHeight = video.videoHeight * (targetWidth / video.videoWidth);
+      offsetX = 0;
+      offsetY = (targetHeight - drawHeight) / 2;
     }
+
+    // Draw video with object-cover behavior (matches preview)
+    context.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
     // Add emoji sticker
     if (selectedEmoji) {
@@ -177,6 +194,7 @@ export default function Dashboard() {
       context.fillText(selectedEmoji, x, y);
     }
 
+    // Maximum quality JPEG
     const imageData = canvas.toDataURL("image/jpeg", 1.0);
     setCapturedImage(imageData);
     setShowCamera(false);
@@ -247,14 +265,14 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
       {/* Header */}
       <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
-        <div className="max-w-screen-xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">Selfie Mailer</h1>
-            <p className="text-sm text-white/80">{profile?.emailAddress}</p>
+        <div className="max-w-screen-xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-white">Selfie Mailer</h1>
+            <p className="text-xs sm:text-sm text-white/80 truncate">{profile?.emailAddress}</p>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="text-white/90 hover:text-white text-sm font-medium"
+            className="text-white/90 hover:text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg hover:bg-white/10 transition whitespace-nowrap ml-2"
           >
             Sign Out
           </button>
@@ -287,19 +305,14 @@ export default function Dashboard() {
         )}
 
         {showCamera && (
-          <div className="flex flex-col items-center min-h-screen justify-center">
-            <div className="w-full max-w-md mx-auto bg-black rounded-3xl overflow-hidden shadow-2xl relative">
+          <div className="flex flex-col items-center min-h-screen justify-center py-4">
+            <div className="w-full max-w-md mx-auto bg-black rounded-3xl overflow-hidden shadow-2xl relative" style={{ aspectRatio: "9 / 16" }}>
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full"
-                style={{
-                  aspectRatio: "9 / 16",
-                  objectFit: "cover",
-                  transform: facingMode === "user" ? "scaleX(-1)" : "none"
-                }}
+                className="w-full h-full object-cover"
               />
 
               {/* Camera Controls Overlay */}
@@ -308,9 +321,10 @@ export default function Dashboard() {
                   <button
                     onClick={toggleCamera}
                     className="w-12 h-12 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-white/30 transition"
+                    title="Switch Camera"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                     </svg>
                   </button>
 
@@ -362,14 +376,14 @@ export default function Dashboard() {
             </div>
 
             {/* Emoji/Sticker Picker */}
-            <div className="w-full max-w-md mx-auto mt-4 bg-white/95 backdrop-blur rounded-2xl p-4 shadow-lg">
-              <p className="text-sm font-semibold text-gray-700 mb-3 text-center">Add a Sticker</p>
-              <div className="grid grid-cols-8 gap-2 max-h-40 overflow-y-auto">
+            <div className="w-full max-w-md mx-auto mt-4 bg-white/95 backdrop-blur rounded-2xl p-3 sm:p-4 shadow-lg">
+              <p className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 text-center">Add a Sticker (Optional)</p>
+              <div className="grid grid-cols-8 gap-1 sm:gap-2 max-h-32 sm:max-h-40 overflow-y-auto">
                 {animalEmojis.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => setSelectedEmoji(emoji === selectedEmoji ? "" : emoji)}
-                    className={`text-2xl sm:text-3xl p-2 rounded-lg transition ${
+                    className={`text-xl sm:text-2xl p-1 sm:p-2 rounded-lg transition ${
                       selectedEmoji === emoji
                         ? "bg-indigo-100 scale-110 ring-2 ring-indigo-500"
                         : "hover:bg-gray-100 active:bg-gray-200"
@@ -384,13 +398,13 @@ export default function Dashboard() {
         )}
 
         {capturedImage && (
-          <div className="flex flex-col items-center min-h-screen justify-center">
+          <div className="flex flex-col items-center min-h-screen justify-center py-4">
             <div className="w-full max-w-md mx-auto bg-white/95 backdrop-blur rounded-3xl overflow-hidden shadow-2xl">
               <img
                 src={capturedImage}
                 alt="Captured"
-                className="w-full"
-                style={{ aspectRatio: "9 / 16", objectFit: "cover" }}
+                className="w-full h-auto"
+                style={{ aspectRatio: "9 / 16", objectFit: "contain" }}
               />
               <div className="p-6 space-y-3">
                 <button
@@ -403,7 +417,7 @@ export default function Dashboard() {
                 <button
                   onClick={retakePhoto}
                   disabled={sending}
-                  className="w-full bg-gray-200 text-gray-800 py-4 px-6 rounded-xl font-semibold hover:bg-gray-300 transition-all active:scale-95"
+                  className="w-full bg-gray-200 text-gray-800 py-4 px-6 rounded-xl font-semibold hover:bg-gray-300 transition-all active:scale-95 disabled:opacity-50"
                 >
                   Retake Photo
                 </button>
